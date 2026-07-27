@@ -14,7 +14,7 @@ import sys
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from rlm_mdu import detect, fix, health, MDU_CONFIG
+from rlm_mdu import detect, fix, health, metrics, rules, MDU_CONFIG, SCAN_TARGETS
 
 
 class MDUHandler(BaseHTTPRequestHandler):
@@ -44,17 +44,18 @@ class MDUHandler(BaseHTTPRequestHandler):
             return
         
         workspace = data.get("workspace", "D:/DO/WEB/TOOLS/L0-CANON/unified-design")
+        patterns = data.get("patterns")
         
         if self.path == "/health":
             self.send_json(health())
         
         elif self.path == "/detect":
-            result = detect(workspace)
+            result = detect(workspace, patterns)
             self.send_json(result)
         
         elif self.path == "/fix":
             dry_run = data.get("dry_run", False)
-            result = fix(workspace, dry_run)
+            result = fix(workspace, dry_run, patterns)
             self.send_json(result)
         
         else:
@@ -64,14 +65,24 @@ class MDUHandler(BaseHTTPRequestHandler):
         """Handle GET requests"""
         if self.path == "/health":
             self.send_json(health())
+        elif self.path == "/targets":
+            self.send_json({"targets": SCAN_TARGETS.get("targets", [])})
+        elif self.path == "/metrics":
+            self.send_json(metrics())
+        elif self.path == "/rules":
+            self.send_json(rules())
         elif self.path == "/":
             self.send_json({
                 "service": "RLM-MDU",
                 "version": "1.0.0",
                 "endpoints": {
+                    "GET /health": "Health check",
+                    "GET /targets": "List scan targets config",
+                    "GET /metrics": "Get MIMIR metrics",
+                    "GET /rules": "List all 14 ERR patterns",
                     "POST /health": "Health check",
-                    "POST /detect": "Detect frictions in workspace",
-                    "POST /fix": "Apply corrections (body: {workspace, dry_run})"
+                    "POST /detect": "Detect frictions in workspace (body: {workspace, patterns})",
+                    "POST /fix": "Apply corrections (body: {workspace, dry_run, patterns})"
                 },
                 "mdu_config": MDU_CONFIG
             })

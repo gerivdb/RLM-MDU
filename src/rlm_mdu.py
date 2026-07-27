@@ -9,9 +9,10 @@ import json
 import re
 import hashlib
 import subprocess
+import yaml
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, asdict
 
 
@@ -128,9 +129,20 @@ ERR_PATTERNS = {
         "pattern": r"git commit.*-m.*feat.*:",
         "severity": "medium",
         "fixable": True,
-        "fix_strategy": "split_commit_suggestion",
-    },
-}
+"fix_strategy": "split_commit_suggestion",
+        },
+    }
+
+# Load scan targets configuration
+def load_scan_targets() -> Dict:
+    """Load scan targets from config file"""
+    config_path = Path(__file__).parent.parent / "config" / "scan_targets.yaml"
+    if config_path.exists():
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    return {"targets": []}
+
+SCAN_TARGETS = load_scan_targets()
 
 # Chemins des règles MDU (14 règles dans .kilocode/rules/)
 KILO_RULES_PATH = Path("C:/Users/GG/.kilocode/rules")
@@ -154,16 +166,39 @@ class Violation:
 class FrictionDetector:
     """Détecteur des 14 frictions MDU"""
     
-    def __init__(self, workspace: str):
+    def __init__(self, workspace: str, patterns: Optional[List[str]] = None):
         self.workspace = Path(workspace)
         self.violations: List[Violation] = []
+        self.patterns_filter = set(patterns) if patterns else None
+        self.target_config = self._get_target_config()
+        self.exclude_dirs = set(self.target_config.get("exclude_dirs", []))
+    
+    def _get_target_config(self) -> Dict:
+        """Find matching target config for this workspace"""
+        for target in SCAN_TARGETS.get("targets", []):
+            if Path(target["path"]).resolve() == self.workspace.resolve():
+                return target
+        return {}
     
     def scan_files(self, pattern: str = "**/*") -> List[Path]:
-        """Scanne les fichiers dans le workspace"""
+        """Scanne les fichiers dans le workspace avec exclusions"""
         files = []
         for ext in [".md", ".py", ".yaml", ".yml", ".json", ".ps1", ".zig", ".toml"]:
             files.extend(self.workspace.rglob(f"*{ext}"))
-        return files
+        
+        # Filter out excluded directories
+        filtered = []
+        for f in files:
+            # Check if any parent directory is in exclude_dirs
+            excluded = False
+            for parent in f.parents:
+                if parent.name in self.exclude_dirs:
+                    excluded = True
+                    break
+            if not excluded:
+                filtered.append(f)
+        
+        return filtered
     
     def check_frontmatter(self, file: Path, content: str) -> List[Violation]:
         """ERR-001: Frontmatter manquant/invalide"""
@@ -412,6 +447,10 @@ class FrictionDetector:
         
         # Runtime checks (git commands)
         all_violations.extend(self._runtime_git_checks())
+        
+        # Filter by patterns if specified
+        if self.patterns_filter:
+            all_violations = [v for v in all_violations if v.err_code in self.patterns_filter]
         
         return {
             "timestamp": datetime.now().isoformat(),
@@ -669,15 +708,34 @@ TYPE_HASH = {
 # API PUBLIQUE
 # =============================================================================
 
-def detect(workspace: str) -> Dict[str, Any]:
-    """API: POST /detect - Détecte toutes les frictions"""
-    detector = FrictionDetector(workspace)
+def detect(workspace: str, patterns: Optional[List[str]] = None) -> Dict[str, Any]:
+    """API: POST /detect - Détecte toutes les frictions
+    
+    Args:
+        workspace: Path to workspace
+        patterns: Optional list of ERR codes to filter (e.g., ["ERR-011", "ERR-012"])
+                  If not provided, will use patterns from scan_targets.yaml config
+    """
+    # If no patterns provided, load from scan_targets config
+    if patterns is None:
+        for target in SCAN_TARGETS.get("targets", []):
+            if Path(target["path"]).resolve() == Path(workspace).resolve():
+                patterns = target.get("patterns")
+                break
+    
+    detector = FrictionDetector(workspace, patterns)
     return detector.detect_all()
 
 
-def fix(workspace: str, dry_run: bool = False) -> Dict[str, Any]:
+def fix(workspace: str, dry_run: bool = False, patterns: Optional[List[str]] = None) -> Dict[str, Any]:
     """API: POST /fix - Applique les corrections"""
-    detector = FrictionDetector(workspace)
+    if patterns is None:
+        for target in SCAN_TARGETS.get("targets", []):
+            if Path(target["path"]).resolve() == Path(workspace).resolve():
+                patterns = target.get("patterns")
+                break
+    
+    detector = FrictionDetector(workspace, patterns)
     result = detector.detect_all()
     
     violations = [Violation(**v) for v in result.get("violations", [])]
