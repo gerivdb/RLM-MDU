@@ -1,0 +1,20 @@
+{
+  "repo": "RLM-MDU",
+  "statement_hash": "ad0219b4cbc92be45584b36fc1939ca8",
+  "curx_validated": true,
+  "result": {
+    "anomalies": [
+      "Missing teaches edges",
+      "Missing prerequisite_of edges",
+      "Missing consolidates edges"
+    ],
+    "causal_accuracy": 0.88,
+    "counterfactual_depth": 0.61,
+    "edges_validated": [],
+    "fragility": 0.15,
+    "generalization": 0.75,
+    "status": "ok"
+  },
+  "level": 1,
+  "validated_at": "2026-09-12T01:56:32.853355+00:00"
+}
