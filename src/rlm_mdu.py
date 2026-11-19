@@ -748,7 +748,7 @@ def health() -> Dict[str, Any]:
     return {
         "status": "healthy",
         "runner": "RLM-MDU",
-        "port": 8793,
+    "port": 8803,
         "layer": "L2b_QUALIFIER",
         "logical_layers": ["N2", "N3"],
         "ternary_role": {"primary": "Obs", "secondary": ["C"], "forbidden": []},

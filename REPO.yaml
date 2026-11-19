@@ -1,0 +1,5 @@
+name: RLM-MDU
+stratum: L2-PLATFORM
+profile: citizen
+wal_reference: "0x243"
+description: Gestion des données utilisateur pour le moteur RLM
